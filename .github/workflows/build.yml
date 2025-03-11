@@ -52,5 +52,5 @@ jobs:
         with:
           name: 'xzptool-Windows-PDBs-${{matrix.compiler}}-${{matrix.build_type}}'
           path: |
-            ${{env.BUILD_DIR}}/xzptool.pdb
+            ${{env.BUILD_DIR}}/${{matrix.build_type}}/xzptool.pdb
           retention-days: 7
