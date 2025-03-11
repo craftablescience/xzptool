@@ -47,7 +47,7 @@ void decompress(const std::string& inputPath, const std::string& outputPath, boo
 	const auto readBlockSize = reader.read<uint32_t>();
 	std::cout << "Read block size: " << readBlockSize << " bytes" << std::endl;
 	const auto decompressionBufferSize = reader.read<uint32_t>();
-	std::cout << "Decompression buffer size: " << decompressionBufferSize << std::endl;
+	std::cout << "Decompression buffer size: " << decompressionBufferSize << " bytes" << std::endl;
 	const auto windowSize = reader.read<uint32_t>();
 	std::cout << "Window size: " << windowSize << " bytes" << std::endl;
 
