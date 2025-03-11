@@ -65,7 +65,7 @@ void decompress(const std::string& inputPath, const std::string& outputPath, boo
 		if (!verbose) {
 			std::cout << '\n' << std::unitbuf;
 		}
-		while (true) {
+		while (blockStream.tell() < blockStream.size()) {
 			auto compressedBlockSize = blockStream.read<uint16_t>();
 			if (compressedBlockSize == 0) {
 				VERBOSE_LOG("Sector clear");
