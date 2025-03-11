@@ -1,0 +1,56 @@
+name: Build
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    # nothing here
+
+env:
+  BUILD_DIR: '${{github.workspace}}/build'
+
+jobs:
+  build-windows:
+    strategy:
+      matrix:
+        build_type: [Release]
+        compiler: [msvc]
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: cmd
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x86
+          spectre: true
+
+      - name: Configure CMake
+        run: cmake -G "Visual Studio 17 2022" -A "Win32" -B "${{env.BUILD_DIR}}" -DCMAKE_BUILD_TYPE=${{matrix.build_type}} -DXZPTOOL_USE_LTO=ON
+
+      - name: Build Binaries
+        working-directory: '${{env.BUILD_DIR}}'
+        run: cmake --build . --config ${{matrix.build_type}} -t xzptool
+
+      - name: Upload Standalone
+        uses: actions/upload-artifact@v4
+        with:
+          name: 'xzptool-Windows-Standalone-${{matrix.compiler}}-${{matrix.build_type}}'
+          path: |
+            ${{env.BUILD_DIR}}/${{matrix.build_type}}/xzptool.exe
+          retention-days: 7
+
+      - name: Upload Standalone PDBs
+        uses: actions/upload-artifact@v4
+        with:
+          name: 'xzptool-Windows-PDBs-${{matrix.compiler}}-${{matrix.build_type}}'
+          path: |
+            ${{env.BUILD_DIR}}/xzptool.pdb
+          retention-days: 7
