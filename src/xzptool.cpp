@@ -27,8 +27,45 @@ constexpr uint32_t XZ_SIGNATURE = ('x' << 24) | ('C' << 16) | ('m' << 8) | ('p')
 
 #define VERBOSE_LOG(...) do { if (verbose) { std::cout << __VA_ARGS__ << std::endl; } } while (0)
 
+void* __stdcall JC_alloc(uint32_t size)         { return std::malloc(size); }
+bool  __stdcall JC_free(void* mem)              { std::free(mem); return true; }
+bool  __stdcall JC_callback(uint32_t, uint32_t) { return true; }
+
 void compress(const std::string& inputPath, const std::string& outputPath, bool verbose) {
-	throw std::runtime_error{"Unimplemented right now :("};
+	FileStream reader{inputPath, FileStream::OPT_READ};
+	FileStream writer{outputPath, FileStream::OPT_TRUNCATE | FileStream::OPT_CREATE_IF_NONEXISTENT};
+
+	const auto decompressedSize = std::filesystem::file_size(inputPath);
+	constexpr uint32_t READ_BLOCK_SIZE = 1024 * 512; // 0.5mb
+	constexpr uint32_t WINDOW_SIZE = 16384; // 16kb
+
+	writer
+		.write<uint32_t>(XZ_SIGNATURE)
+		.write<uint32_t>(1)
+		.write<uint32_t>(decompressedSize)
+		.write(READ_BLOCK_SIZE);
+	const auto decompressionBufferSizePos = writer.tell_out();
+	writer
+		.write<uint32_t>(0)
+		.write(WINDOW_SIZE);
+
+	std::vector<std::byte> compressedBuffer;
+	BufferStream compressedBufferStream{compressedBuffer};
+
+	std::vector<std::byte> compressedWindow(WINDOW_SIZE * 3);
+
+	uint32_t uncompressedEquivalentOfCompressedBuffer = 0;
+	uint32_t maxUncompressedEquivalentOfCompressedBuffer = 0;
+
+	while (reader.tell_in() < decompressedSize) {
+		std::vector<std::byte> decompressedWindow = reader.read_bytes(WINDOW_SIZE);
+		const auto compressedSize = JCALG1_Compress(decompressedWindow.data(), decompressedWindow.size(), compressedWindow.data(), WINDOW_SIZE, &JC_alloc, &JC_free, &JC_callback, true);
+		uncompressedEquivalentOfCompressedBuffer += WINDOW_SIZE;
+
+		if (compressedBuffer.size() + sizeof(uint16_t) + compressedSize < READ_BLOCK_SIZE) {
+			compressedBufferStream.write<uint16_t>(compressedSize).write(compressedWindow.data(), compressedSize);
+		}
+	}
 }
 
 void decompress(const std::string& inputPath, const std::string& outputPath, bool verbose) {
