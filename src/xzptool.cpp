@@ -1,3 +1,7 @@
+// ReSharper disable CppParameterMayBeConst
+// ReSharper disable CppRedundantParentheses
+// ReSharper disable CppRedundantQualifier
+
 #include <cstddef>
 #include <cstdlib>
 #include <exception>
@@ -23,15 +27,18 @@ extern "C" __declspec(dllimport) int __stdcall SetConsoleOutputCP(unsigned int);
 
 namespace {
 
-constexpr uint32_t XZ_SIGNATURE = ('x' << 24) | ('C' << 16) | ('m' << 8) | ('p');
+constexpr uint32_t XZ_SIGNATURE_COMPLEX = ('x' << 24) | ('C' << 16) | ('m' << 8) | ('p' << 0);
+constexpr uint32_t XZ_SIGNATURE_SIMPLE  = ('x' << 24) | ('S' << 16) | ('m' << 8) | ('p' << 0);
 
-#define VERBOSE_LOG(...) do { if (verbose) { std::cout << __VA_ARGS__ << std::endl; } } while (0)
+bool g_verbose = false;
+
+#define VERBOSE_LOG(...) do { if (g_verbose) { std::cout << __VA_ARGS__ << std::endl; } } while (0)
 
 void* __stdcall JC_alloc(uint32_t size)         { return std::malloc(size); }
 bool  __stdcall JC_free(void* mem)              { std::free(mem); return true; }
 bool  __stdcall JC_callback(uint32_t, uint32_t) { return true; }
 
-void compress(const std::string& inputPath, const std::string& outputPath, bool verbose) {
+void compress(const std::string& inputPath, const std::string& outputPath) {
 	FileStream reader{inputPath, FileStream::OPT_READ};
 	FileStream writer{outputPath, FileStream::OPT_TRUNCATE | FileStream::OPT_CREATE_IF_NONEXISTENT};
 
@@ -40,7 +47,7 @@ void compress(const std::string& inputPath, const std::string& outputPath, bool 
 	constexpr uint32_t WINDOW_SIZE = 16384; // 16kb
 
 	writer
-		.write<uint32_t>(XZ_SIGNATURE)
+		.write<uint32_t>(XZ_SIGNATURE_COMPLEX)
 		.write<uint32_t>(1)
 		.write<uint32_t>(decompressedSize)
 		.write(READ_BLOCK_SIZE);
@@ -68,69 +75,84 @@ void compress(const std::string& inputPath, const std::string& outputPath, bool 
 	}
 }
 
-void decompress(const std::string& inputPath, const std::string& outputPath, bool verbose) {
+void decompress(const std::string& inputPath, const std::string& outputPath) {
 	FileStream reader{inputPath, FileStream::OPT_READ};
 	FileStream writer{outputPath, FileStream::OPT_TRUNCATE | FileStream::OPT_CREATE_IF_NONEXISTENT};
 
-	if (reader.read<uint32_t>() != XZ_SIGNATURE) {
-		throw std::runtime_error{"Input file is not an xz_ file!"};
-	}
-	if (reader.read<uint32_t>() != 1) {
-		throw std::runtime_error{"Input file has an unsupported version!"};
-	}
-
+	const auto signature = reader.read<uint32_t>();
 	const auto decompressedSize = reader.read<uint32_t>();
 	std::cout << "Decompressed size: " << decompressedSize << " bytes" << std::endl;
-	const auto readBlockSize = reader.read<uint32_t>();
-	std::cout << "Read block size: " << readBlockSize << " bytes" << std::endl;
-	const auto decompressionBufferSize = reader.read<uint32_t>();
-	std::cout << "Decompression buffer size: " << decompressionBufferSize << " bytes" << std::endl;
-	const auto windowSize = reader.read<uint32_t>();
-	std::cout << "Window size: " << windowSize << " bytes" << std::endl;
 
-	std::vector<std::byte> decompressedBlock(windowSize);
-
-	bool firstBlock = true;
-	while (writer.tell_out() < decompressedSize) {
-		const auto leftoverSize = decompressedSize - writer.tell_out();
-		const auto block = reader.read_bytes(leftoverSize < readBlockSize ? leftoverSize : (readBlockSize - (firstBlock * sizeof(uint32_t) * 6)));
-		BufferStreamReadOnly blockStream{block.data(), block.size()};
-		if (blockStream.size() < readBlockSize) {
-			VERBOSE_LOG("Next block has a size less than the read block size. This shouldn't happen, but it should read fine.");
+	if (signature == XZ_SIGNATURE_SIMPLE) {
+		// Quick and easy
+		const auto compressedBlock = reader.read_bytes(std::filesystem::file_size(inputPath) - (sizeof(uint32_t) * 2));
+		std::vector<std::byte> decompressedBlock(decompressedSize);
+		const auto decompressedBlockSize = JCALG1_Decompress_Fast(compressedBlock.data(), decompressedBlock.data());
+		if (decompressedBlockSize > decompressedSize) {
+			throw std::runtime_error{"Found decompressed block size (" + std::to_string(decompressedBlockSize) + ") which is greater than the size given in the simple header, tell a programmer!"};
+		}
+		VERBOSE_LOG(" ...decompressed block with size " << decompressedBlockSize << " bytes");
+		writer.write(decompressedBlock.data(), decompressedBlockSize);
+	} else if (signature == XZ_SIGNATURE_COMPLEX) {
+		// Not quick and easy
+		if (reader.read<uint32_t>() != 1) {
+			throw std::runtime_error{"Input file has an unsupported version!"};
 		}
 
-		if (!verbose) {
-			std::cout << '\n' << std::unitbuf;
-		}
-		while (blockStream.tell() < blockStream.size()) {
-			auto compressedBlockSize = blockStream.read<uint16_t>();
-			if (compressedBlockSize == 0) {
-				VERBOSE_LOG("Sector clear");
-				if (!verbose) {
-					std::cout << "\r\033[A" << std::fixed << std::setprecision(2) << std::setw(6) << (static_cast<float>(writer.tell_out()) / static_cast<float>(decompressedSize) * 100.f) << '%';
-				}
-				break;
+		const auto readBlockSize = reader.read<uint32_t>();
+		std::cout << "Read block size: " << readBlockSize << " bytes" << std::endl;
+		const auto decompressionBufferSize = reader.read<uint32_t>();
+		std::cout << "Decompression buffer size: " << decompressionBufferSize << " bytes" << std::endl;
+		const auto windowSize = reader.read<uint32_t>();
+		std::cout << "Window size: " << windowSize << " bytes" << std::endl;
+
+		std::vector<std::byte> decompressedBlock(windowSize);
+
+		bool firstBlock = true;
+		while (writer.tell_out() < decompressedSize) {
+			const auto leftoverSize = decompressedSize - writer.tell_out();
+			const auto block = reader.read_bytes(leftoverSize < readBlockSize ? leftoverSize : (readBlockSize - (firstBlock * sizeof(uint32_t) * 6)));
+			BufferStreamReadOnly blockStream{block.data(), block.size()};
+			if (blockStream.size() < readBlockSize) {
+				VERBOSE_LOG("Next block has a size less than the read block size. This shouldn't happen, but it should read fine.");
 			}
-			if (compressedBlockSize & 0x8000) {
-				compressedBlockSize &= ~0x8000;
-				VERBOSE_LOG("Found uncompressed block with size " << compressedBlockSize << " bytes");
-				writer.write(blockStream.read_bytes(compressedBlockSize));
-			} else {
-				VERBOSE_LOG("Found compressed block with size " << compressedBlockSize << " bytes");
-				const auto compressedBlock = blockStream.read_bytes(compressedBlockSize);
-				const auto decompressedBlockSize = JCALG1_Decompress_Fast(compressedBlock.data(), decompressedBlock.data());
-				if (decompressedBlockSize > windowSize) {
-					throw std::runtime_error{"Found decompressed block size (" + std::to_string(decompressedBlockSize) + ") which is greater than window size! Tell a programmer!"};
-				}
-				VERBOSE_LOG(" ...decompressed block with size " << decompressedBlockSize << " bytes");
-				writer.write(decompressedBlock.data(), decompressedBlockSize);
-			}
-		}
 
-		firstBlock = false;
+			if (!g_verbose) {
+				std::cout << '\n' << std::unitbuf;
+			}
+			while (blockStream.tell() < blockStream.size()) {
+				auto compressedBlockSize = blockStream.read<uint16_t>();
+				if (compressedBlockSize == 0) {
+					VERBOSE_LOG("Sector clear");
+					if (!g_verbose) {
+						std::cout << "\r\033[A" << std::fixed << std::setprecision(2) << std::setw(6) << (static_cast<float>(writer.tell_out()) / static_cast<float>(decompressedSize) * 100.f) << '%';
+					}
+					break;
+				}
+				if (compressedBlockSize & 0x8000) {
+					compressedBlockSize &= ~0x8000;
+					VERBOSE_LOG("Found uncompressed block with size " << compressedBlockSize << " bytes");
+					writer.write(blockStream.read_bytes(compressedBlockSize));
+				} else {
+					VERBOSE_LOG("Found compressed block with size " << compressedBlockSize << " bytes");
+					const auto compressedBlock = blockStream.read_bytes(compressedBlockSize);
+					const auto decompressedBlockSize = JCALG1_Decompress_Fast(compressedBlock.data(), decompressedBlock.data());
+					if (decompressedBlockSize > windowSize) {
+						throw std::runtime_error{"Found decompressed block size (" + std::to_string(decompressedBlockSize) + ") which is greater than window size, tell a programmer!"};
+					}
+					VERBOSE_LOG(" ...decompressed block with size " << decompressedBlockSize << " bytes");
+					writer.write(decompressedBlock.data(), decompressedBlockSize);
+				}
+			}
+
+			firstBlock = false;
+		}
+	} else {
+		throw std::runtime_error{"Input file is not an xz_ file!"};
 	}
+
 	VERBOSE_LOG("Done");
-	if (!verbose) {
+	if (!g_verbose) {
 		std::cout << std::endl;
 	}
 }
@@ -160,8 +182,7 @@ int main(int argc, const char* const argv[]) {
 	std::string outputPath;
 	cli.add_argument("-o", "--output").metavar("PATH").help("The path to the output file.").store_into(outputPath);
 
-	bool verbose = false;
-	cli.add_argument("-v", "--verbose").help("Print out more information.").flag().store_into(verbose);
+	cli.add_argument("-v", "--verbose").help("Print out more information.").flag().store_into(g_verbose);
 
 	bool overwrite = false;
 	cli.add_argument("-y").help("Automatically say yes to any prompts.").flag().store_into(overwrite);
@@ -215,9 +236,9 @@ int main(int argc, const char* const argv[]) {
 
 		// Do the thing
 		if (isCompressing) {
-			::compress(inputPath, outputPath, verbose);
+			::compress(inputPath, outputPath);
 		} else {
-			::decompress(inputPath, outputPath, verbose);
+			::decompress(inputPath, outputPath);
 		}
 	} catch (const std::exception& e) {
 		if (argc > 1) {
