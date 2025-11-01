@@ -14,7 +14,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/helpers")
 include(CS_All)
 
 # initial VS integration
-cs_setup_vs_defaults()
+cs_setup_vs_defaults(STARTUP_PROJECT "${PROJECT_NAME}")
 
 # set common compile options
 option(XZPTOOL_USE_LTO "Compile ${PROJECT_NAME} with LTO/IPO" OFF)
@@ -30,11 +30,4 @@ cs_configure_target(${PROJECT_NAME} MANIFEST)
 target_link_libraries(${PROJECT_NAME} PRIVATE argparse::argparse bufferstream jcalg1)
 if(WIN32 AND MSVC)
     target_link_options(${PROJECT_NAME} PRIVATE "/SAFESEH:NO")
-endif()
-
-# VS setup
-if(WIN32)
-    set_property(
-            DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-            PROPERTY VS_STARTUP_PROJECT "${PROJECT_NAME}")
 endif()
