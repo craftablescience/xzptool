@@ -1,7 +1,5 @@
 cmake_minimum_required(VERSION 3.25 FATAL_ERROR)
 
-set(CMAKE_TARGET_G)
-
 # set up project
 project(xzptool
         DESCRIPTION "A tool to convert .xz_ files to/from editable .xzp pack files."
