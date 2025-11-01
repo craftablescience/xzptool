@@ -4,7 +4,7 @@ set(CMAKE_CXX_STANDARD 11)
 
 # Create library
 if(NOT WIN32)
-    message(FATAL_ERROR "JCalg1 library was only ever compiled as a 32-bit Windows library. Sorry!")
+    message(STATUS "Note that JCalg1 library was only ever compiled as a 32-bit Windows library. You'd better be cross-compiling right now!")
 endif()
 add_library(${PROJECT_NAME} INTERFACE
         "${CMAKE_CURRENT_SOURCE_DIR}/include/jcalg1.hpp")
