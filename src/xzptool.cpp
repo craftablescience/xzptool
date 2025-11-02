@@ -106,7 +106,7 @@ void decompress(const std::string& inputPath, const std::string& outputPath) {
 		const auto windowSize = reader.read<uint32_t>();
 		std::cout << "Window size: " << windowSize << " bytes" << std::endl;
 
-		std::vector<std::byte> decompressedBlock(windowSize);
+		std::vector<std::byte> decompressedBlock(decompressionBufferSize);
 
 		bool firstBlock = true;
 		while (writer.tell_out() < decompressedSize) {
@@ -137,8 +137,8 @@ void decompress(const std::string& inputPath, const std::string& outputPath) {
 					VERBOSE_LOG("Found compressed block with size " << compressedBlockSize << " bytes");
 					const auto compressedBlock = blockStream.read_bytes(compressedBlockSize);
 					const auto decompressedBlockSize = JCALG1_Decompress_Fast(compressedBlock.data(), decompressedBlock.data());
-					if (decompressedBlockSize > windowSize) {
-						throw std::runtime_error{"Found decompressed block size (" + std::to_string(decompressedBlockSize) + ") which is greater than window size, tell a programmer!"};
+					if (decompressedBlockSize > decompressionBufferSize) {
+						throw std::runtime_error{"Found decompressed block size (" + std::to_string(decompressedBlockSize) + ") which is greater than maximum decompression buffer size, tell a programmer!"};
 					}
 					VERBOSE_LOG(" ...decompressed block with size " << decompressedBlockSize << " bytes");
 					writer.write(decompressedBlock.data(), decompressedBlockSize);
