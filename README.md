@@ -1,4 +1,7 @@
-# xzptool
+<div>
+  <img align="left" width="44px" src="https://github.com/craftablescience/xzptool/blob/main/res/logo.png?raw=true" alt="xzptool Logo" />
+  <h1>xzptool</h1>
+</div>
 
 <div>
   <a href="https://github.com/craftablescience/xzptool/blob/main/LICENSE" target="_blank" rel="noopener noreferrer"><img src="https://img.shields.io/github/license/craftablescience/xzptool?branch=main&label=license" alt="License" /></a>

@@ -26,7 +26,7 @@ cs_include_directory(ext)
 # xzptool
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/src/config.h.in" "${CMAKE_CURRENT_SOURCE_DIR}/src/config.h")
 add_executable(${PROJECT_NAME} "${CMAKE_CURRENT_SOURCE_DIR}/src/xzptool.cpp")
-cs_configure_target(${PROJECT_NAME} MANIFEST)
+cs_configure_target(${PROJECT_NAME} LOGO MANIFEST)
 target_link_libraries(${PROJECT_NAME} PRIVATE argparse::argparse bufferstream jcalg1)
 if(WIN32 AND MSVC)
     target_link_options(${PROJECT_NAME} PRIVATE "/SAFESEH:NO")
